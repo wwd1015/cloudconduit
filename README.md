@@ -15,13 +15,65 @@ A unified Python API for connecting to Snowflake, Databricks, and S3 with compre
 
 ## Installation
 
+### From Enterprise Artifactory (Recommended)
+
 ```bash
-pip install cloudconduit
+# Install from enterprise artifactory
+pip install cloudconduit --index-url https://artifactory.yourcompany.com/artifactory/api/pypi/pypi-local/simple
+
+# For development with optional dependencies
+pip install cloudconduit[dev] --index-url https://artifactory.yourcompany.com/artifactory/api/pypi/pypi-local/simple
 ```
 
-For development:
+**Configure pip for permanent artifactory access:**
+
+Create or update `~/.pip/pip.conf` (Linux/macOS) or `%APPDATA%\pip\pip.ini` (Windows):
+```ini
+[global]
+index-url = https://artifactory.yourcompany.com/artifactory/api/pypi/pypi-local/simple
+trusted-host = artifactory.yourcompany.com
+extra-index-url = https://pypi.org/simple
+```
+
+Or set environment variables:
 ```bash
-pip install cloudconduit[dev]
+export PIP_INDEX_URL=https://artifactory.yourcompany.com/artifactory/api/pypi/pypi-local/simple
+export PIP_TRUSTED_HOST=artifactory.yourcompany.com
+export PIP_EXTRA_INDEX_URL=https://pypi.org/simple
+```
+
+### From GitHub Enterprise
+
+```bash
+# Install from GitHub Enterprise repository
+pip install git+https://github.com/yourcompany/cloudconduit.git
+
+# For development with optional dependencies
+pip install git+https://github.com/yourcompany/cloudconduit.git[dev]
+```
+
+### From Local Source
+
+```bash
+# Clone the repository
+git clone https://github.com/yourcompany/cloudconduit.git
+cd cloudconduit
+
+# Install in development mode
+pip install -e .
+
+# Or install with development dependencies
+pip install -e .[dev]
+```
+
+### From Local Wheel/Tarball
+
+```bash
+# If you have a built distribution file
+pip install cloudconduit-1.0.0-py3-none-any.whl
+
+# Or from source distribution
+pip install cloudconduit-1.0.0.tar.gz
 ```
 
 ## Quick Start
