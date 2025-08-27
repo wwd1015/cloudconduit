@@ -1,0 +1,17 @@
+# CloudConduit Default Configuration
+# Non-critical parameters that can be pushed to environment variables
+
+snowflake:
+  account: "your-account"    # Required: Your Snowflake account identifier (without .snowflakecomputing.com)
+  warehouse: "COMPUTE_WH"    # Required: Warehouse for compute resources
+  database: "ANALYTICS"      # Optional: Default database
+  schema: "PUBLIC"           # Optional: Default schema
+
+databricks:
+  server_hostname: ""  # Set your workspace hostname
+  http_path: ""        # Set your warehouse HTTP path  
+  catalog: "main"
+  schema: "default"
+
+s3:
+  region_name: "us-east-1"

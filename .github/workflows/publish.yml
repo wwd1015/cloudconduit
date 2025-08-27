@@ -1,0 +1,63 @@
+name: Publish to Internal Artifactory
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish'
+        required: true
+        default: '0.1.0'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+    
+    - name: Build package
+      run: |
+        python -m build
+    
+    - name: Check package
+      run: |
+        twine check dist/*
+    
+    - name: Configure artifactory credentials
+      run: |
+        cat > ~/.pypirc << EOF
+        [distutils]
+        index-servers = internal
+        
+        [internal]
+        repository = ${{ secrets.ARTIFACTORY_URL }}
+        username = ${{ secrets.ARTIFACTORY_USERNAME }}
+        password = ${{ secrets.ARTIFACTORY_PASSWORD }}
+        EOF
+    
+    - name: Publish to internal artifactory
+      run: |
+        twine upload --repository internal dist/*
+    
+    - name: Create GitHub release assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: dist/
+        asset_name: cloudconduit-dist
+        asset_content_type: application/zip

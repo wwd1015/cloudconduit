@@ -1,0 +1,21 @@
+# CloudConduit - Core Dependencies
+# Generated from pyproject.toml
+
+# Core data processing
+pandas>=2.0.0
+
+# Database connectors  
+snowflake-connector-python[pandas]>=3.0.0
+databricks-sql-connector>=3.0.0
+sqlalchemy>=2.0.0
+
+# Cloud storage
+boto3>=1.34.0
+
+# Security and configuration
+keyring>=24.0.0
+python-dotenv>=1.0.0
+pyyaml>=6.0.0
+
+# Validation and type safety
+pydantic>=2.0.0
