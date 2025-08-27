@@ -6,8 +6,7 @@ import snowflake.connector
 from snowflake.connector.pandas_tools import write_pandas
 
 from .base import BaseConnector
-from ..utils.credential_manager import CredentialManager
-from ..utils.system_info import get_default_snowflake_user
+from ..utils.config_manager import ConfigManager
 
 
 class SnowflakeConnector(BaseConnector):
@@ -18,26 +17,20 @@ class SnowflakeConnector(BaseConnector):
         
         Args:
             username: Snowflake username. If None, uses current system user as default.
-            config: Additional configuration parameters
+            config: Additional configuration parameters (highest priority)
         """
         super().__init__(config)
         
-        # Use default user if none provided
-        if username is None:
-            # Check if config has a domain suffix for username formatting
-            domain_suffix = (config or {}).get("domain_suffix")
-            username = get_default_snowflake_user(domain_suffix)
+        # Initialize configuration manager
+        self.config_manager = ConfigManager()
         
-        self.username = username
-        self.credential_manager = CredentialManager()
-        
-        # Get credentials and merge with provided config
-        cred_config = self.credential_manager.get_snowflake_credentials()
-        self.config = {**cred_config, **(config or {})}
+        # Get complete configuration following priority order
+        self.config = self.config_manager.get_snowflake_config(username, config)
         
         # Extract and validate required parameters
         self.account = self.config.get("account")
         self.warehouse = self.config.get("warehouse")
+        self.username = self.config.get("user")
         
         if not self.account:
             raise ValueError("Snowflake account not found. Please set SNOWFLAKE_ACCOUNT environment variable or update config.yaml")

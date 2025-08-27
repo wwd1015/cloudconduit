@@ -7,10 +7,7 @@ from cloudconduit import (
     connect_databricks, 
     connect_s3, 
     CloudConduit, 
-    CredentialManager,
-    push_config_to_env, 
-    show_config, 
-    create_user_config
+    ConfigManager,
 )
 
 
@@ -100,34 +97,30 @@ def main():
     print("     - AWS_SECRET_ACCESS_KEY")
     print("     - AWS_DEFAULT_REGION")
     
-    print("\n5. Automatic Configuration Management:")
-    print("CloudConduit offers flexible configuration loading!")
-    print("   - Required: account, warehouse → YAML config file or env vars")
-    print("   - Optional: database, schema → YAML config file or env vars")  
-    print("   - Critical: passwords, tokens → Environment variables or keychain")
+    print("\n5. Configuration Priority System:")
+    print("CloudConduit follows this configuration priority order (highest to lowest):")
+    print("   1. Function parameters (highest priority)")
+    print("   2. Environment variables")
+    print("   3. Keychain (credentials only, macOS)")
+    print("   4. config.yaml defaults (lowest priority)")
     print("")
-    print("   # Option 1: Full import (auto-loads config)")
+    print("   # Simple usage - no setup needed!")
     print("   import cloudconduit")
-    print("   sf = cloudconduit.connect_snowflake()  # Automatic!")
+    print("   sf = cloudconduit.connect_snowflake()  # Uses defaults from config.yaml")
     print("")
-    print("   # Option 2: Lightweight config loading")
-    print("   from cloudconduit.utils.quick_config import load_config")
-    print("   load_config()  # Loads without full import")
-    print("   from cloudconduit.connectors.snowflake import SnowflakeConnector")
-    print("   sf = SnowflakeConnector()")
+    print("   # Override with function parameters:")
+    print("   sf = cloudconduit.connect_snowflake('custom-user', {'warehouse': 'LARGE_WH'})")
     print("")
-    print("   # Option 3: Manual operations:")
-    print("   from cloudconduit import push_config_to_env, show_config")
-    print("   push_config_to_env()      # Manual push")
-    print("   show_config()             # View configuration")
+    print("   # Or set environment variables:")
+    print("   os.environ['SNOWFLAKE_WAREHOUSE'] = 'LARGE_WH'")
+    print("   sf = cloudconduit.connect_snowflake()")
     print("")
     print("   # VS Code Setup: See VSCODE_SETUP.md for permanent IDE configuration")
-    print("   # Disable auto-loading: export CLOUDCONDUIT_DISABLE_AUTO_CONFIG=1")
     
     print("\n6. Snowflake Keychain Support (macOS):")
     print("Store password securely in keychain:")
-    print("   from cloudconduit import CredentialManager")
-    print("   cm = CredentialManager()")
+    print("   from cloudconduit import ConfigManager")
+    print("   cm = ConfigManager()")
     print("   # Store password in keychain:")
     print("   cm.set_credential('SNOWFLAKE_PASSWORD', 'your-password')")
     print("   # Username is auto-detected from system user")
@@ -136,17 +129,13 @@ def main():
     try:
         # Show current package configuration
         print("   Package default configuration:")
-        show_config()
+        cm = ConfigManager()
+        cm.show_config()
         
-        # Demonstrate pushing to environment
-        print("\n   Pushing defaults to environment variables...")
-        env_vars = push_config_to_env()
-        if env_vars:
-            print(f"   ✓ Set {len(env_vars)} environment variables:")
-            for var, value in env_vars.items():
-                print(f"     {var} = {value}")
-        else:
-            print("   ✓ All environment variables already set")
+        print("\n   ✓ Configuration loads automatically with priority system")
+        print("     - No manual setup required!")
+        print("     - Override any setting with environment variables")
+        print("     - Or pass parameters directly to functions")
         
     except Exception as e:
         print(f"   ✗ Config demo failed: {e}")

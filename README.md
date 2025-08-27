@@ -70,37 +70,143 @@ pip install -e .[dev]
 
 ```bash
 # If you have a built distribution file
-pip install cloudconduit-1.0.0-py3-none-any.whl
+pip install cloudconduit-0.2.0-py3-none-any.whl
 
 # Or from source distribution
-pip install cloudconduit-1.0.0.tar.gz
+pip install cloudconduit-0.2.0.tar.gz
 ```
 
 ## Quick Start
 
-### Using Individual Connectors
+### First-Time Setup with Password Input
+
+```python
+import os
+from cloudconduit import connect_snowflake, ConfigManager
+import pandas as pd
+
+# Option 1: Set password as environment variable
+os.environ["SNOWFLAKE_PASSWORD"] = "your-password"
+sf = connect_snowflake()  # Uses system user and account from config.yaml
+
+# Option 2: Pass credentials directly in config
+config = {"password": "your-password", "warehouse": "COMPUTE_WH"}
+sf = connect_snowflake("your-username", config)
+
+# Test connection
+result = sf.execute("SELECT CURRENT_USER(), CURRENT_ROLE()")
+print(result)
+```
+
+### Secure Keychain Setup (Recommended for Development)
+
+```python
+from cloudconduit import ConfigManager, connect_snowflake
+
+# Store password securely in macOS keychain (one-time setup)
+cm = ConfigManager()
+cm.set_credential("SNOWFLAKE_PASSWORD", "your-password")
+cm.set_credential("DATABRICKS_ACCESS_TOKEN", "your-databricks-token")
+print("✓ Credentials stored securely in keychain")
+
+# Now you can connect without exposing passwords
+sf = connect_snowflake()  # Uses system user, config.yaml defaults, and keychain password
+print(f"Connected as: {sf.username} to account: {sf.account}")
+```
+
+### Comprehensive Usage Examples
 
 ```python
 from cloudconduit import connect_snowflake, connect_databricks, connect_s3
 import pandas as pd
 
-# Connect to Snowflake (automatically uses current system user and account from config)
+# Create sample data
+df = pd.DataFrame({
+    "id": [1, 2, 3, 4, 5],
+    "name": ["Alice", "Bob", "Charlie", "Diana", "Eve"],
+    "department": ["Engineering", "Sales", "Marketing", "HR", "Finance"],
+    "salary": [75000, 65000, 60000, 55000, 70000],
+    "hire_date": pd.date_range("2020-01-01", periods=5, freq="6M")
+})
+
+# === Snowflake Examples ===
 sf = connect_snowflake()
-result = sf.execute("SELECT CURRENT_USER(), CURRENT_ROLE()")
-print(result)
 
-# Or specify username explicitly
-sf = connect_snowflake("custom-username")
+# Upload DataFrame to Snowflake
+sf.upload_df(df, "db.schema.tbl", if_exists="replace")
+print("✓ Data uploaded to Snowflake")
 
-# Connect to Databricks  
+# Execute queries
+result = sf.execute("SELECT COUNT(*) as total_employees FROM employees")
+print(f"Total employees: {result.iloc[0]['TOTAL_EMPLOYEES']}")
+
+# Get data back as DataFrame
+employees = sf.execute("SELECT * FROM employees WHERE salary > 60000")
+print(f"High earners:\n{employees}")
+
+# Copy table for backup
+sf.copy_table("employees", "employees_backup")
+print("✓ Table backed up")
+
+# Grant access to role
+sf.grant_access("employees", "ANALYST_ROLE", "SELECT")
+print("✓ Access granted")
+
+# List tables in current schema
+tables = sf.list_tables()
+print(f"Available tables: {tables}")
+
+# Get table information
+info = sf.get_table_info("employees")
+print(f"Table info: {info}")
+
+# Drop table when done
+sf.drop_table("employees_backup")
+print("✓ Backup table dropped")
+
+# === Databricks Examples ===
 db = connect_databricks()
-tables = db.list_tables()
-print(tables)
 
-# Connect to S3
+# Upload DataFrame (creates table)
+db.upload_df(df, "main.default.employees", if_exists="replace")
+print("✓ Data uploaded to Databricks")
+
+# Execute query
+result = db.execute("SELECT department, AVG(salary) as avg_salary FROM main.default.employees GROUP BY department")
+print(f"Average salary by department:\n{result}")
+
+# List tables and schemas
+schemas = db.list_schemas("main")
+tables = db.list_tables("main", "default")
+print(f"Schemas: {schemas}")
+print(f"Tables: {tables}")
+
+# === S3 Examples ===
 s3 = connect_s3()
+
+# Upload DataFrame as different formats
+s3.upload_df(df, "my-data-bucket", "employees/data.csv", file_format="csv")
+s3.upload_df(df, "my-data-bucket", "employees/data.parquet", file_format="parquet")
+s3.upload_df(df, "my-data-bucket", "employees/data.json", file_format="json")
+print("✓ Data uploaded to S3 in multiple formats")
+
+# Download data back as DataFrame
+downloaded_df = s3.download_df("my-data-bucket", "employees/data.parquet", file_format="parquet")
+print(f"Downloaded data shape: {downloaded_df.shape}")
+
+# List buckets and objects
 buckets = s3.list_buckets()
-print(buckets)
+objects = s3.list_objects("my-data-bucket", prefix="employees/")
+print(f"Available buckets: {[b['Name'] for b in buckets]}")
+print(f"Objects in employees/: {[obj['Key'] for obj in objects]}")
+
+# Generate presigned URL for sharing
+url = s3.create_presigned_url("my-data-bucket", "employees/data.csv", expiration=3600)
+print(f"Shareable URL (1 hour): {url[:50]}...")
+
+# Copy objects between locations
+s3.copy_object("my-data-bucket", "employees/data.csv", "my-backup-bucket", "archive/employees_2023.csv")
+print("✓ Data copied to backup location")
 ```
 
 ### Using Unified Interface
@@ -109,420 +215,141 @@ print(buckets)
 from cloudconduit import CloudConduit
 import pandas as pd
 
-# Create unified interface
+# Create unified interface - connects to all services
 cc = CloudConduit()
 
-# Access connectors (automatically uses system user and account from config)
-sf = cc.snowflake()  # Uses current system user and account from config/env
-db = cc.databricks()
-s3 = cc.s3()
+# Access all connectors through one interface
+sf = cc.snowflake()   # Uses keychain/env credentials automatically
+db = cc.databricks()  # Uses keychain/env credentials automatically
+s3 = cc.s3()          # Uses keychain/env credentials automatically
 
-# Upload DataFrame to Snowflake
-df = pd.DataFrame({"id": [1, 2, 3], "name": ["A", "B", "C"]})
-sf.upload_df(df, "my_table")
+# Cross-platform data pipeline example
+df = pd.DataFrame({"id": [1, 2, 3], "value": [100, 200, 300]})
 
-# Execute query
-result = sf.execute("SELECT * FROM my_table")
-print(result)
+# 1. Upload to S3
+s3.upload_df(df, "data-lake", "raw/input.csv", file_format="csv")
+
+# 2. Process in Databricks
+db.execute("CREATE TABLE processed AS SELECT id, value * 2 as doubled_value FROM delta.`s3://data-lake/raw/input.csv`")
+
+# 3. Load results to Snowflake
+processed_df = db.execute("SELECT * FROM processed")
+sf.upload_df(processed_df, "final_results")
+
+print("✓ Cross-platform pipeline completed")
 ```
 
 ### Using Context Managers
 
 ```python
-from cloudconduit import SnowflakeConnector
+from cloudconduit import SnowflakeConnector, DatabricksConnector
 
-with SnowflakeConnector() as sf:  # Uses system user and account from config
-    result = sf.execute("SELECT * FROM my_table")
-    sf.copy_table("source_table", "backup_table")
+# Automatic connection cleanup
+with SnowflakeConnector() as sf:
+    # Upload data
+    df = pd.DataFrame({"test": [1, 2, 3]})
+    sf.upload_df(df, "temp_table")
+    
+    # Process data
+    result = sf.execute("SELECT COUNT(*) FROM temp_table")
+    print(f"Row count: {result.iloc[0, 0]}")
+    
+    # Cleanup
+    sf.drop_table("temp_table")
+    
+# Connection automatically closed here
+
+# Chain multiple operations
+with SnowflakeConnector() as sf, DatabricksConnector() as db:
+    # Move data between platforms
+    snowflake_data = sf.execute("SELECT * FROM important_table")
+    db.upload_df(snowflake_data, "main.default.imported_data")
+    print("✓ Data migrated from Snowflake to Databricks")
 ```
 
 ## Configuration
 
-### Automatic User Detection
+CloudConduit v0.2.0 uses a simple 4-level priority system that **works out of the box** with minimal configuration:
 
-CloudConduit automatically detects your system username for Snowflake connections, eliminating the need to specify usernames in most cases:
+**Priority Order (highest to lowest):**
+1. **Function parameters** (highest priority)
+2. **Environment variables**  
+3. **Keychain** (credentials only, macOS)
+4. **config.yaml defaults** (lowest priority)
 
-```python
-from cloudconduit import connect_snowflake, SnowflakeConnector
+**💡 For detailed setup and VS Code integration:** See [VSCODE_SETUP.md](VSCODE_SETUP.md)
 
-# These both automatically use your current system username and account from config
-sf1 = connect_snowflake()
-sf2 = SnowflakeConnector()
+### Environment Variables
 
-# System user: "john.doe" -> Snowflake username: "john.doe"
-# System user: "Jane Smith" -> Snowflake username: "jane.smith"  
-# System user: "admin@company.com" -> Snowflake username: "admin"
-```
+For **production deployments** or to **override defaults**, set these environment variables:
 
-**Custom Username Override:**
-```python
-# Still works if you need to specify a different username
-sf = connect_snowflake("custom.username")
-```
-
-**Domain Suffix Support:**
-```python
-# Add domain suffix to system username
-config = {"domain_suffix": "@company.com"}
-sf = SnowflakeConnector(config=config)
-# Uses: "john.doe@company.com"
-```
-
-### Automatic Configuration Loading
-
-CloudConduit automatically loads configuration when you import the package - **no manual setup required!**
-
-```python
-# Option 1: Full package import (auto-loads config)
-import cloudconduit
-sf = cloudconduit.connect_snowflake()  # Uses account from config/environment
-
-# Option 2: Lightweight config loading (for individual imports)
-from cloudconduit.utils.quick_config import load_config
-load_config()  # Loads config without importing full package
-
-from cloudconduit.connectors.snowflake import SnowflakeConnector
-sf = SnowflakeConnector()  # Uses loaded config
-
-# Option 3: Direct import (environment only)
-from cloudconduit.connectors.snowflake import SnowflakeConnector  
-sf = SnowflakeConnector()  # Uses environment variables only
-```
-
-**💡 For VS Code users:** See [VSCODE_SETUP.md](VSCODE_SETUP.md) for permanent environment variable configuration in your IDE.
-
-### Configuration Setup Options
-
-**Option 1: Update config.yaml (Recommended)**
-```yaml
-# Edit cloudconduit/config.yaml:
-snowflake:
-  account: "abc123.us-east-1"     # Your account identifier
-  warehouse: "COMPUTE_WH"
-  database: "ANALYTICS"
-```
-
-**Option 2: Environment Variables**
+**Credentials (Required):**
 ```bash
-export SNOWFLAKE_ACCOUNT="abc123.us-east-1"
-export SNOWFLAKE_WAREHOUSE="COMPUTE_WH"
-```
-
-**Option 3: Manual Push (if needed)**
-```python
-from cloudconduit import push_config_to_env
-
-# Manually push config to environment
-push_config_to_env()
-```
-
-### Disabling Auto-Configuration
-
-If you need to disable automatic config loading:
-```bash
-export CLOUDCONDUIT_DISABLE_AUTO_CONFIG=1
-python your_script.py
-```
-
-### Environment Variables (Optional Overrides)
-
-With automatic config loading, **most settings are handled automatically**. You only need environment variables for:
-
-1. **Credentials (always required)**
-2. **Overriding config.yaml defaults**
-3. **Production/Docker deployments**
-
-**Required Credentials Only:**
-```bash
-# Snowflake - only credentials needed (account/warehouse from config.yaml)
+# Snowflake
 export SNOWFLAKE_PASSWORD="your-password"
-# OR for key-pair authentication:
-export SNOWFLAKE_PRIVATE_KEY_PATH="/path/to/key.p8"
-export SNOWFLAKE_PRIVATE_KEY_PASSPHRASE="key-passphrase"
-# OR for SSO:
-export SNOWFLAKE_AUTHENTICATOR="externalbrowser"
+# OR: export SNOWFLAKE_PRIVATE_KEY_PATH="/path/to/key.p8"
+# OR: export SNOWFLAKE_AUTHENTICATOR="externalbrowser"  # SSO
 
-# Databricks - only credentials needed (server/path from config.yaml)
+# Databricks  
 export DATABRICKS_ACCESS_TOKEN="your-access-token"
 
-# AWS/S3 - only credentials needed (region from config.yaml)
+# AWS/S3
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_SESSION_TOKEN="your-session-token"  # Optional, for temporary credentials
 ```
 
-**Optional Overrides (only if you want to override config.yaml):**
+**Configuration Overrides (Optional):**
 ```bash
-# Override config.yaml settings if needed
-export SNOWFLAKE_ACCOUNT="different-account"        # Required - override config.yaml
-export SNOWFLAKE_WAREHOUSE="production-warehouse"   # Required - override config.yaml
-export SNOWFLAKE_DATABASE="prod-database"           # Optional - override config.yaml
-export SNOWFLAKE_SCHEMA="prod-schema"               # Optional - override config.yaml
-export DATABRICKS_SERVER_HOSTNAME="prod.databricks.com"  # Override config.yaml
-export AWS_DEFAULT_REGION="us-west-2"               # Override config.yaml
-```
-
-**Complete Override (for production/Docker):**
-```bash
-# If you don't want to use config.yaml at all
-export SNOWFLAKE_ACCOUNT="prod-account"      # Required
-export SNOWFLAKE_WAREHOUSE="PROD_WH"         # Required  
-export SNOWFLAKE_DATABASE="PROD_DB"          # Optional
-export SNOWFLAKE_SCHEMA="PROD_SCHEMA"        # Optional
-
+# Override config.yaml defaults if needed
+export SNOWFLAKE_ACCOUNT="production-account"
+export SNOWFLAKE_WAREHOUSE="PROD_WH"
 export DATABRICKS_SERVER_HOSTNAME="prod.databricks.com"
-export DATABRICKS_HTTP_PATH="/sql/1.0/warehouses/prod-id"
-export DATABRICKS_CATALOG="prod"
-export DATABRICKS_SCHEMA="main"
-
 export AWS_DEFAULT_REGION="us-west-2"
 ```
 
 ### macOS Keychain Integration
 
-CloudConduit provides seamless integration with macOS keychain for secure credential storage. This is especially useful for local development where you don't want to expose credentials in environment variables.
-
-#### Storing Credentials in Keychain
-
-**Using Python (Simple Method):**
-```python
-from cloudconduit import CredentialManager
-
-cm = CredentialManager()
-
-# Store credentials using simple key names
-cm.set_credential("SNOWFLAKE_PASSWORD", "your-snowflake-password")
-cm.set_credential("DATABRICKS_TOKEN", "your-databricks-token")  
-cm.set_credential("AWS_SECRET_ACCESS_KEY", "your-aws-secret")
-
-# Keychain entries are created as:
-# - Service: "cloudconduit", Account: "snowflake_password"
-# - Service: "cloudconduit", Account: "databricks_token"  
-# - Service: "cloudconduit", Account: "aws_secret_access_key"
-```
-
-**Using Command Line:**
-```python
-# Store Snowflake password
-python3 -c "
-from cloudconduit import CredentialManager
-cm = CredentialManager()
-cm.set_credential('SNOWFLAKE_PASSWORD', 'your-actual-password')
-print('✓ Snowflake password stored in keychain')
-"
-
-# Store Databricks token
-python3 -c "
-from cloudconduit import CredentialManager
-cm = CredentialManager()
-cm.set_credential('DATABRICKS_TOKEN', 'your-databricks-token')
-print('✓ Databricks token stored in keychain')
-"
-```
-
-#### Automatic Credential Retrieval
-
-Once stored in keychain, credentials are automatically retrieved:
+Store credentials securely using macOS keychain for development (see Quick Start for examples):
 
 ```python
-from cloudconduit import connect_snowflake, connect_databricks
-
-# No need to specify account or password - automatically retrieved from config and keychain
-sf = connect_snowflake("custom-username")  # Account from config, password from keychain
-
-# Or use all defaults (recommended)
-sf = connect_snowflake()  # Account from config, username from system, password from keychain
-
-# Works with all connectors
-db = connect_databricks()  # Retrieves token from environment or keychain
-```
-
-#### Keychain Management
-
-**List stored credentials:**
-```bash
-# View CloudConduit keychain entries
-security find-generic-password -s "cloudconduit" -a "snowflake_password"
-security find-generic-password -s "cloudconduit" -a "databricks_token"
-```
-
-**Delete credentials:**
-```python
-from cloudconduit import CredentialManager
-
-cm = CredentialManager()
-
-# Remove specific credentials
-cm.delete_credential("SNOWFLAKE_PASSWORD")
-cm.delete_credential("DATABRICKS_TOKEN")
-```
-
-**Manual keychain management:**
-```bash
-# Add credential manually using macOS security command
-security add-generic-password -a "snowflake_password" -s "cloudconduit" -w "your-password"
-
-# Delete credential manually
-security delete-generic-password -a "snowflake_password" -s "cloudconduit"
-```
-
-#### Security Features
-
-- **Encrypted Storage**: All credentials are encrypted using macOS keychain encryption
-- **User Authentication**: macOS may prompt for user authentication when accessing stored credentials
-- **Application Isolation**: Credentials are stored per-application (cloudconduit service name)
-- **Sync Support**: Keychain items sync across your Apple devices (if enabled)
-- **Backup Integration**: Included in Time Machine and iCloud keychain backups
-
-#### Credential Priority Order
-
-CloudConduit checks credentials in this order:
-
-1. **Environment Variables** (highest priority)
-2. **macOS Keychain** (if on macOS and username provided)  
-3. **Configuration Parameters** (lowest priority)
-
-This allows environment variables to override keychain for different deployment scenarios.
-
-#### Best Practices for Keychain Usage
-
-**Development Setup:**
-```bash
-# One-time setup for development
-python3 -c "
-from cloudconduit import CredentialManager
-cm = CredentialManager()
-
-# Store all your development credentials
-cm.set_credential('SNOWFLAKE_PASSWORD', input('Snowflake password: '))
-cm.set_credential('DATABRICKS_TOKEN', input('Databricks token: '))
-print('✓ Development credentials stored securely')
-"
-```
-
-**Production Deployment:**
-```bash
-# Use environment variables in production (Docker, CI/CD, etc.)
-export SNOWFLAKE_PASSWORD="$PROD_PASSWORD"
-export DATABRICKS_ACCESS_TOKEN="$PROD_TOKEN"
-
-# Keychain is ignored when env vars are present
-```
-
-**Multi-Environment Support:**
-```python
-import os
-from cloudconduit import connect_snowflake
-
-# Determine environment
-env = os.getenv('ENVIRONMENT', 'development')
-
-if env == 'development':
-    # Use keychain in development (credentials auto-retrieved)
-    sf = connect_snowflake()  # Uses keychain for password, system user for username
-else:
-    # Use environment variables in production  
-    sf = connect_snowflake()  # Uses env vars for everything
+from cloudconduit import ConfigManager
+cm = ConfigManager()
+cm.set_credential("SNOWFLAKE_PASSWORD", "your-password")  # One-time setup
+# Now connect without exposing passwords: sf = connect_snowflake()
 ```
 
 ## API Reference
 
-### Snowflake Connector
+### Core Methods (Available on all connectors)
 
-```python
-from cloudconduit import SnowflakeConnector
+**Data Operations:**
+- `execute(query)` - Execute SQL queries, returns pandas DataFrame
+- `upload_df(df, table_name, if_exists="replace")` - Upload DataFrame as table
+- `download_df()` - Download table as DataFrame (S3 only)
 
-sf = SnowflakeConnector("username", config={
-    "warehouse": "compute_wh", 
-    "database": "mydb",
-    "schema": "public"
-})
+**Table Management:**
+- `copy_table(source, target)` - Duplicate tables
+- `drop_table(table_name)` - Remove tables
+- `list_tables()` - List available tables
+- `get_table_info(table_name)` - Get table metadata
 
-# Execute queries
-result = sf.execute("SELECT * FROM table")
+**Access Control:**
+- `grant_access(table, role, permissions)` - Grant table access
 
-# Upload DataFrame
-sf.upload_df(df, "table_name", if_exists="replace")
+### S3-Specific Methods
 
-# Copy table
-sf.copy_table("source", "target")
+- `list_buckets()` - List S3 buckets
+- `list_objects(bucket, prefix)` - List objects in bucket
+- `copy_object(src_bucket, src_key, dst_bucket, dst_key)` - Copy S3 objects
+- `create_presigned_url(bucket, key, expiration)` - Generate shareable URLs
 
-# Grant access
-sf.grant_access("table", "role", "SELECT,INSERT")
+**File Formats:** S3 supports CSV, Parquet, and JSON via `file_format` parameter.
 
-# List tables
-tables = sf.list_tables("schema_name")
-
-# Get table info
-info = sf.get_table_info("table_name")
-```
-
-### Databricks Connector
-
-```python
-from cloudconduit import DatabricksConnector
-
-db = DatabricksConnector(config={
-    "catalog": "main",
-    "schema": "default"
-})
-
-# Execute queries
-result = db.execute("SELECT * FROM table")
-
-# Upload DataFrame (creates table)
-db.upload_df(df, "catalog.schema.table", if_exists="replace")
-
-# List tables
-tables = db.list_tables("catalog", "schema")
-
-# List schemas
-schemas = db.list_schemas("catalog")
-```
-
-### S3 Connector
-
-```python
-from cloudconduit import S3Connector
-
-s3 = S3Connector()
-
-# Upload DataFrame as CSV/Parquet/JSON
-s3.upload_df(df, "bucket", "path/file.csv", file_format="csv")
-
-# Download as DataFrame
-df = s3.download_df("bucket", "path/file.csv", file_format="csv")
-
-# List buckets
-buckets = s3.list_buckets()
-
-# List objects
-objects = s3.list_objects("bucket", prefix="path/")
-
-# Copy objects
-s3.copy_object("src_bucket", "src_key", "dst_bucket", "dst_key")
-
-# Generate presigned URL
-url = s3.create_presigned_url("bucket", "key", expiration=3600)
-```
-
-## Utility Functions
+### Utility Functions
 
 ```python
 from cloudconduit import execute, upload_df, copy_table, drop_table, grant_access
-
-# Works with any database connector
-result = execute(connector, "SELECT * FROM table")
-
-# Upload DataFrame to any connector
-upload_df(connector, df, "destination")
-
-# Copy/drop tables
-copy_table(connector, "source", "target")
-drop_table(connector, "table_name")
-
-# Grant access
-grant_access(connector, "table", "user", "SELECT")
+# Generic functions that work with any connector instance
 ```
 
 ## Error Handling

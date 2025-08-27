@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 import io
 
 from .base import BaseConnector
-from ..utils.credential_manager import CredentialManager
+from ..utils.config_manager import ConfigManager
 
 
 class S3Connector(BaseConnector):
@@ -17,14 +17,15 @@ class S3Connector(BaseConnector):
         """Initialize S3 connector.
         
         Args:
-            config: Additional configuration parameters
+            config: Additional configuration parameters (highest priority)
         """
         super().__init__(config)
-        self.credential_manager = CredentialManager()
         
-        # Get credentials and merge with provided config
-        cred_config = self.credential_manager.get_s3_credentials()
-        self.config = {**cred_config, **(config or {})}
+        # Initialize configuration manager
+        self.config_manager = ConfigManager()
+        
+        # Get complete configuration following priority order
+        self.config = self.config_manager.get_s3_config(config)
         
         self._s3_client = None
         self._s3_resource = None

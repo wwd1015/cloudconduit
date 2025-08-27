@@ -6,7 +6,7 @@ import pandas as pd
 from unittest.mock import Mock, MagicMock, patch
 from typing import Dict, Any
 
-from cloudconduit.utils.credential_manager import CredentialManager
+from cloudconduit.utils.config_manager import ConfigManager
 
 
 @pytest.fixture
@@ -154,9 +154,9 @@ def mock_keyring():
 
 
 @pytest.fixture
-def credential_manager(mock_environment, mock_keyring):
-    """CredentialManager instance with mocked dependencies."""
-    return CredentialManager()
+def config_manager(mock_environment, mock_keyring):
+    """ConfigManager instance with mocked dependencies."""
+    return ConfigManager()
 
 
 @pytest.fixture(scope="session")

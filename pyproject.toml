@@ -1,6 +1,6 @@
 [project]
 name = "cloudconduit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Unified API for connecting to Snowflake, Databricks, and S3 with credential management"
 readme = "README.md"
 requires-python = ">=3.12"

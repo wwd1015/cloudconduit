@@ -19,26 +19,22 @@ class TestSnowflakeConnector:
         assert connector._connection is None
 
     @patch.dict('os.environ', {'SNOWFLAKE_ACCOUNT': 'test-account', 'SNOWFLAKE_WAREHOUSE': 'test-wh'})
-    @patch('cloudconduit.connectors.snowflake.get_default_snowflake_user')
-    def test_init_default_username(self, mock_default_user):
+    @patch('cloudconduit.utils.config_manager.get_current_user')
+    def test_init_default_username(self, mock_current_user):
         """Test connector initialization with default username."""
-        mock_default_user.return_value = "system.user"
+        mock_current_user.return_value = "system.user"
         
         connector = SnowflakeConnector()
         assert connector.account == "test-account"
         assert connector.username == "system.user"
-        mock_default_user.assert_called_once_with(None)
+        mock_current_user.assert_called_once()
 
     @patch.dict('os.environ', {'SNOWFLAKE_ACCOUNT': 'test-account', 'SNOWFLAKE_WAREHOUSE': 'test-wh'})
-    @patch('cloudconduit.connectors.snowflake.get_default_snowflake_user')
-    def test_init_default_username_with_domain_suffix(self, mock_default_user):
-        """Test connector initialization with default username and domain suffix."""
-        mock_default_user.return_value = "system.user@company.com"
-        
-        config = {"domain_suffix": "@company.com"}
-        connector = SnowflakeConnector(config=config)
-        assert connector.username == "system.user@company.com"
-        mock_default_user.assert_called_once_with("@company.com")
+    def test_init_with_explicit_username(self):
+        """Test connector initialization with explicitly provided username."""
+        connector = SnowflakeConnector("explicit.user")
+        assert connector.account == "test-account"
+        assert connector.username == "explicit.user"
 
     @patch.dict('os.environ', {'SNOWFLAKE_ACCOUNT': 'test-account', 'SNOWFLAKE_WAREHOUSE': 'test-wh'})
     def test_init_with_config(self):
